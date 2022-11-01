@@ -1,0 +1,258 @@
+---
+title: "Night_lights-Syria"
+author: "Daniel K Baissa"
+date: "2022-10-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(raster)
+library(tidyverse)
+library(sf)
+```
+
+```{r}
+Syria <- st_read("Syria_shapefile/syr_admbnda_adm1_uncs_unocha_20201217.shp")
+```
+
+
+```{r}
+F2006 <-
+  raster("Syria_Data/F15_20060101_20060131.cloud2.light1.marginal0.line_screened.avg_vis.tif")
+
+F2011 <- raster("Syria_Data/F18_20110101_20110131.cloud2.light1.marginal0.glare2.line_screened.avg_vis.tif")
+```
+
+```{r}
+plot(F2006)
+plot(F2011)
+
+```
+
+```{r}
+plot(Syria)
+```
+
+```{r}
+# e <- as(extent(32, 39, 34.9, 42.5), 'SpatialPolygons')
+e <- as(extent(34.9, 42.5, 32, 39), 'SpatialPolygons')
+
+crs(e) <- "+proj=longlat +datum=WGS84 +no_defs"
+
+F2006 <- crop(F2006, e)
+F2006 <- mask(F2006, Syria)
+
+F2011 <- crop(F2011, e)
+F2011 <- mask(F2011, Syria)
+
+plot(F2006)
+plot(F2011)
+```
+DeNoising
+
+```{r}
+# F2006@data@values[which(F2006@data@values < 5)] <- 0
+# F2011@data@values[which(F2011@data@values < 5)] <- 0
+
+```
+
+
+```{r}
+
+
+
+hist(log(F2011))
+hist(log(F2006))
+hist(log(F2011)-.5)
+
+```
+
+
+```{r}
+plot((log(F2011)-.5)-log(F2006))
+plot(log(F2011)-log(F2006))
+
+```
+
+```{r}
+library(stars)
+```
+
+```{r}
+
+# 
+# sd = gdal_subdatasets("Syria_Data/MCD43GF_bsa_nir_031_2011_V006.hdf")
+# sd
+
+r2011 <- raster("Syria_Data/MCD43GF_bsa_nir_031_2011_V006.hdf")
+r2011 <- crop(r2011, e)
+r2011 <- mask(r2011, Syria)
+
+r2006 <- raster("Syria_Data/MCD43GF_bsa_nir_001_2006_V006.hdf")
+r2006 <- crop(r2006, e)
+r2006 <- mask(r2006, Syria)
+
+
+plot(r2011, col=(terrain.colors(10)))
+plot(r2006, col=(terrain.colors(10)))
+
+# plot(r2011 - r2006)
+plot((r2006 - r2011))
+plot(log(r2006 - r2011))
+
+```
+
+```{r}
+a.dif <- r2011 - r2006
+
+plot(log(F2011)-log(F2006), col=rev(terrain.colors(20)))
+# plot((a.dif))
+plot(a.dif, col=(terrain.colors(4)))
+
+```
+
+```{r}
+Syria3 <- st_read("Syria_shapefile/syr_admbnda_adm3_uncs_unocha_20201217.shp")
+plot(Syria3)
+```
+
+
+```{r}
+GTD <- read_csv("GTD/globalterrorismdb_0221dist.csv")
+```
+
+```{r}
+GTD <- GTD |> 
+  filter(iyear > 2005) |> 
+  filter(country_txt == "Syria")
+```
+
+```{r}
+
+
+Nightlight <- log(F2011 - F2006)
+
+Albedo <- as.data.frame(a.dif, xy=T) %>%
+  drop_na()
+
+Albedo$layer <- log(Albedo$layer + abs(min(Albedo$layer)))
+
+hist(Albedo$layer)
+
+Nightlight <- as.data.frame(Nightlight, xy=T) %>% 
+  drop_na()
+
+ggplot() +
+  geom_sf(data = Syria) +
+    # geom_raster(data = Albedo,  aes(x = x, y = y, fill = layer), alpha = .8) +
+  geom_raster(data = Nightlight, aes(x = x, y = y, fill = layer), alpha = .8)+
+  scale_fill_viridis_c(option = "H") +
+
+  # geom_point(data = GTD, aes(y = latitude, x = longitude), color = 'red') +
+
+  theme_classic()
+
+
+ggplot() +
+  geom_sf(data = Syria) +
+    geom_raster(data = Albedo,  aes(x = x, y = y, fill = layer), alpha = .8) +
+  # geom_raster(data = Nightlight, aes(x = x, y = y, fill = layer), alpha = .8)+
+  scale_fill_viridis_c(option = "H") +
+
+  # geom_point(data = GTD, aes(y = latitude, x = longitude), color = 'red') +
+
+  theme_classic()
+
+```
+
+
+```{r}
+Cities <- read_csv("Syria_Data/World_cities.csv")
+
+Cities <- Cities |> 
+  filter(country == "Syria")
+```
+
+
+
+
+```{r}
+ggplot() +
+  geom_sf(data = Syria) +
+    # geom_raster(data = Albedo,  aes(x = x, y = y, fill = layer), alpha = .8) +
+  geom_raster(data = Nightlight, aes(x = x, y = y, fill = layer), alpha = .8)+
+  scale_fill_viridis_c(option = "H") +
+
+  # geom_point(data = GTD, aes(y = latitude, x = longitude), color = 'red') +
+   geom_point(data = Cities, aes(y = lat, x = lng), color = 'red') +
+
+  theme_classic()
+```
+
+
+```{r}
+
+Cities_sf = st_as_sf(Cities, coords = c("lng", "lat"))
+
+
+Cities_sf_km = st_buffer(Cities_sf, .25)
+
+st_crs(Syria) = st_crs(Cities_sf_km)
+
+
+```
+
+```{r}
+plot(Cities_sf_km)
+```
+
+```{r}
+
+ggplot() +
+  geom_sf(data = Syria) +
+    # geom_raster(data = Albedo,  aes(x = x, y = y, fill = layer), alpha = .8) +
+  geom_raster(data = Nightlight, aes(x = x, y = y, fill = layer), alpha = .8)+
+  scale_fill_viridis_c(option = "H") +
+
+  # geom_point(data = GTD, aes(y = latitude, x = longitude), color = 'red') +
+   # geom_point(data = Cities, aes(y = lat, x = lng), color = 'red') +
+  geom_sf(data = Cities_sf_km, fill = "red") +
+
+  theme_classic()
+```
+
+```{r}
+# NL <- log(F2011 - F2006)
+NL <- F2011 - F2006
+
+
+st_crs(Cities_sf_km) = st_crs(NL)
+
+Cities_Lights = mask(NL, Cities_sf_km)
+
+plot(Cities_Lights)
+```
+
+
+```{r}
+hist(Cities_Lights)
+```
+
+```{r}
+hist(F2011 - F2006)
+```
+
+```{r}
+
+md <- F2011 - F2006
+
+difference.means <- mean(Cities_Lights@data@values, na.rm = T) - mean(md@data@values, na.rm = T)
+                     
+```
+
+```{r}
+t.test(Cities_Lights@data@values, md@data@values)
+```
+
