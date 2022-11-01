@@ -1,0 +1,88 @@
+---
+title: "Syria Night Lights"
+author: "Daniel K Baissa"
+date: "2022-11-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(raster)
+library(tidyverse)
+library(sf)
+```
+
+```{r}
+Syria <- st_read("Shapefiles/syr_admbnda_adm0_uncs_unocha_20201217.shp")
+```
+
+```{r}
+F2006 <-
+  raster("Syria_Data/F15_20060101_20060131.cloud2.light1.marginal0.line_screened.avg_vis.tif")
+
+F2011 <- raster("Syria_Data/F18_20110101_20110131.cloud2.light1.marginal0.glare2.line_screened.avg_vis.tif")
+```
+
+```{r}
+e <- as(extent(Syria), 'SpatialPolygons')
+
+crs(e) <- "+proj=longlat +datum=WGS84 +no_defs"
+
+F2006 <- crop(F2006, e)
+# F2006 <- mask(F2006, Syria)
+
+F2011 <- crop(F2011, e)
+# F2011 <- mask(F2011, Syria)
+
+
+plot(F2011)
+```
+
+```{r}
+ppside <- 250
+
+h <- ceiling(ncol(F2011)/ppside)
+v <- ceiling(nrow(F2011)/ppside)
+
+agg <- aggregate(F2011,fact=c(h,v))
+agg[]    <- 1:ncell(agg)
+agg_poly <- rasterToPolygons(agg)
+
+plot(agg_poly)
+```
+
+
+cropping the shape
+
+
+
+```{r}
+ # Extract raster values to list object
+    r.vals <- extract(F2011, agg_poly)
+
+    # Use list apply to calculate mean for each polygon
+    r.mean <- lapply(r.vals, FUN=mean, na.rm = T)
+    
+   
+   
+    # Join mean values to polygon data
+    agg_poly@data <- data.frame(agg_poly@data, NL=unlist(r.mean))
+    
+    
+agg_poly = st_as_sf(agg_poly)     
+```
+
+
+```{r}
+ggplot()+
+  geom_sf(data = agg_poly, mapping =  aes(fill = NL))
+
+df <- st_intersection(agg_poly, Syria)
+
+ggplot()+
+  geom_sf(data = df, mapping =  aes(color = NULL, fill = NL))
+
+```
+
+
