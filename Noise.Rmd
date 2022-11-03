@@ -200,13 +200,12 @@ ggplot(data = test_grid)+
 
 ```
 
-Shapiro-Wilk Test.
-
-If the p-value of the test is greater than α = .05, then the data is assumed to be normally distributed.
 
 
 ```{r}
-shapiro.test(test_grid$stack_diff)
+ggplot()+
+  geom_density(data = test_grid, mapping =  aes(x = stack_diff, y = ..density..) , fill = "red", alpha =.5) +
+  geom_density(data = merged, mapping =  aes(x = diff, y = ..density..),fill = "blue", alpha =.5) +
+  geom_density(data = base_raster_diff, mapping =  aes(x = layer, y = ..density..),fill = "green", alpha =.5)
 ```
-
 
