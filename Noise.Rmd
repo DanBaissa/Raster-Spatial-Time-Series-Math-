@@ -1,0 +1,181 @@
+---
+title: "Noise"
+author: "Daniel K Baissa"
+date: "2022-11-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(raster)
+library(sf)
+```
+
+## Does my new idea fight noise?
+
+Let's find out. Let's start by creating a raster where we know the answers. Then we will randomly add some noise.
+
+
+```{r}
+r <- raster(ncol=100, nrow=100)
+ncell(r)
+hasValues(r)
+set.seed(0)
+# v <- c(rep(.4, ncell(r)/2),rep(.2, ncell(r)/2))
+vals <- rpois(ncell(r), 2)
+# v <- abs(rnorm(ncell(r)))
+vals<- vals/max(vals)  
+values(r)<- vals
+# hasValues(r)
+# inMemory(r)
+# values(r)[1:10]
+# pdf(file = "Examples_albedo/50_50_mix.pdf",   # The directory you want to save the file in
+#     width = 6, # The width of the plot in inches
+#     height = 4) # The height of the plot in inches
+plot(r, main= paste0('Albedo = ', round(mean(vals), digits = 2)))
+# dev.off()
+```
+```{r}
+ppside <- 50
+
+h <- ceiling(ncol(r)/ppside)
+v <- ceiling(nrow(r)/ppside)
+
+agg <- aggregate(r,fact=c(h,v))
+agg[]    <- 1:ncell(agg)
+agg_poly <- rasterToPolygons(agg)
+
+plot(agg_poly)
+```
+
+Now let's see what the average of each area is
+
+```{r}
+base_grid <- agg_poly
+r.vals <- raster::extract(r, base_grid)
+    # Use list apply to calculate mean for each polygon
+    r.mean <- lapply(r.vals, FUN=mean, na.rm = T)
+    # Join mean values to polygon data
+    base_grid@data <- data.frame(base_grid@data, base=unlist(r.mean))
+    
+    base_grid = st_as_sf(base_grid)     
+
+```
+
+Now let's add noise to the raster. Let's assume that the noise is Gaussian with mean zero.
+
+```{r}
+
+r2 <- r + rnorm(ncell(r), 0,sd(vals))
+# r2 <- r + rnorm(ncell(r), 0,1)
+
+
+plot(r2-r)
+
+```
+
+Now let's do something like a spatial mean filter
+
+```{r}
+test_grid <- agg_poly
+r.vals <- raster::extract(r2, test_grid)
+    # Use list apply to calculate mean for each polygon
+    r.mean <- lapply(r.vals, FUN=mean, na.rm = T)
+    # Join mean values to polygon data
+    test_grid@data <- data.frame(test_grid@data, test=unlist(r.mean))
+    
+    merged = st_as_sf(test_grid)     
+
+```
+
+```{r}
+merged <- cbind(base_grid, test = merged$test)
+```
+
+```{r}
+merged <- merged |> 
+  mutate(diff = base - test) |> 
+  mutate(prop_diff = diff/base) |> 
+  mutate(prop_diff_test = test/base)
+```
+
+```{r}
+ggplot()+
+  geom_sf(data = merged, mapping =  aes(color = NULL, fill = prop_diff))
+
+ggplot()+
+  geom_sf(data = merged, mapping =  aes(color = NULL, fill = prop_diff_test))
+```
+
+So there is a nice improvement. Now let's stack them on top of this.
+
+```{r}
+r3 <- r + rnorm(ncell(r), 0,sd(vals))
+r4 <- r + rnorm(ncell(r), 0,sd(vals))
+r5 <- r + rnorm(ncell(r), 0,sd(vals))
+r6 <- r + rnorm(ncell(r), 0,sd(vals))
+r7 <- r + rnorm(ncell(r), 0,sd(vals))
+
+s <- stack(r3,r4,r5,r6,r7)
+
+s[[1,]]
+```
+
+```{r}
+for (i in 1:5) {
+  # r.vals <- raster::extract(paste0("r",i), test_grid)
+    r.vals <- raster::extract(s[[i,]], test_grid)
+
+    # Use list apply to calculate mean for each polygon
+    r.mean <- lapply(r.vals, FUN=mean, na.rm = T)
+    # Join mean values to polygon data
+    test_grid@data <- data.frame(test_grid@data, test=unlist(r.mean))
+    colnames(test_grid@data)[length(colnames(test_grid@data))] <- paste0("test", i)
+    
+}
+  test_grid = st_as_sf(test_grid)   
+```
+
+
+```{r}
+test_grid <- cbind(test_grid, base = merged$base)
+
+test_grid <- test_grid |> 
+  group_by(layer) |> 
+  mutate(mean_test = mean(c(test,test1,test2,test3,test4,test5))) |> 
+  mutate(stack_diff = (mean_test - base))
+         
+
+```
+
+
+```{r}
+ggplot()+
+  geom_sf(data = test_grid, mapping =  aes(color = NULL, fill = mean_test))
+
+ggplot()+
+  geom_sf(data = test_grid, mapping =  aes(color = NULL, fill = stack_diff))
+```
+
+```{r}
+ggplot(data = test_grid)+
+  geom_density(mapping =  aes(x = stack_diff, y = ..density..)) +
+  geom_vline(xintercept = mean(test_grid$stack_diff), colour="red")+
+  geom_vline(xintercept = c(sd(test_grid$stack_diff), -1*sd(test_grid$stack_diff)), colour="red", linetype = "longdash")+
+    geom_vline(xintercept = c(2*sd(test_grid$stack_diff), -2*sd(test_grid$stack_diff)), colour="green", linetype = "longdash")+
+  theme_classic()
+
+```
+
+Shapiro-Wilk Test.
+
+If the p-value of the test is greater than α = .05, then the data is assumed to be normally distributed.
+
+
+```{r}
+shapiro.test(test_grid$stack_diff)
+```
+
+
