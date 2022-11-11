@@ -56,7 +56,7 @@ Now let's see what the average of each area is
 base_grid <- agg_poly
 r.vals <- raster::extract(r, base_grid)
     # Use list apply to calculate mean for each polygon
-    r.mean <- lapply(r.vals, FUN=mean, na.rm = T)
+    r.mean <- lapply(r.vals, FUN=median, na.rm = T)
     # Join mean values to polygon data
     base_grid@data <- data.frame(base_grid@data, base=unlist(r.mean))
     
@@ -97,7 +97,7 @@ Now let's do something like a spatial mean filter
 test_grid <- agg_poly
 r.vals <- raster::extract(r2, test_grid)
     # Use list apply to calculate mean for each polygon
-    r.mean <- lapply(r.vals, FUN=mean, na.rm = T)
+    r.mean <- lapply(r.vals, FUN=median, na.rm = T)
     # Join mean values to polygon data
     test_grid@data <- data.frame(test_grid@data, test=unlist(r.mean))
     
@@ -159,7 +159,7 @@ for (i in 1:5) {
     r.vals <- raster::extract(s[[i,]], test_grid)
 
     # Use list apply to calculate mean for each polygon
-    r.mean <- lapply(r.vals, FUN=mean, na.rm = T)
+    r.mean <- lapply(r.vals, FUN=median, na.rm = T)
     # Join mean values to polygon data
     test_grid@data <- data.frame(test_grid@data, test=unlist(r.mean))
     colnames(test_grid@data)[length(colnames(test_grid@data))] <- paste0("test", i)
@@ -208,127 +208,5 @@ ggplot()+
   geom_density(data = merged, mapping =  aes(x = diff, y = ..density..),fill = "blue", alpha =.5) +
   geom_density(data = base_raster_diff, mapping =  aes(x = layer, y = ..density..),fill = "green", alpha =.5) +
   theme_classic()
-```
-
-```{r}
-t <- rbinom(10, 1,.25)
-t[which(t >0 )] <- rnorm(length(t[which(t >0 )]), 0,sd(vals))
-
-t
-```
-
-```{r}
-t <- rbinom(ncell(r), 1,.25)
-t[which(t >0 )] <- rnorm(length(t[which(t >0 )]), 0,sd(vals))
-
-rt1 <- r + t
-
-```
-
-```{r}
-base_raster_diff <-r- rt1
-base_raster_diff <- as.data.frame(base_raster_diff)
-
-base_raster_diff |> 
-  ggplot()+
-  geom_density(mapping =  aes(x = layer, y = ..density..)) +
-  geom_vline(xintercept = mean(base_raster_diff$layer), colour="red")+
-  geom_vline(xintercept = c(sd(base_raster_diff$layer), -1*sd(base_raster_diff$layer)), colour="red", linetype = "longdash")+
-    geom_vline(xintercept = c(2*sd(base_raster_diff$layer), -2*sd(base_raster_diff$layer)), colour="green", linetype = "longdash")+
-  theme_classic()+
-  labs(title = paste("2 Standard Deviations = ", round(2*sd(base_raster_diff$layer), 3)))
-```
-```{r}
-ppside <- 50
-
-h <- ceiling(ncol(r)/ppside)
-v <- ceiling(nrow(r)/ppside)
-
-agg <- aggregate(r,fact=c(h,v))
-agg[]    <- 1:ncell(agg)
-agg_poly <- rasterToPolygons(agg)
-
-plot(agg_poly)
-```
-
-```{r}
-test_grid <- agg_poly
-r.vals <- raster::extract(rt1, test_grid)
-    # Use list apply to calculate mean for each polygon
-    r.mean <- lapply(r.vals, FUN=mean, na.rm = T)
-    # Join mean values to polygon data
-    test_grid@data <- data.frame(test_grid@data, test.rand=unlist(r.mean))
-    
-    test_grid = st_as_sf(test_grid)  
-
-merged <- cbind(merged, test_grid)
-merged <- merged |> 
-  mutate(diff = base - test.rand) 
-    
-ggplot(data = merged)+
-  geom_density(mapping =  aes(x = diff, y = ..density..)) +
-  geom_vline(xintercept = mean(merged$diff), colour="red")+
-  geom_vline(xintercept = c(sd(merged$diff), -1*sd(merged$diff)), colour="red", linetype = "longdash")+
-    geom_vline(xintercept = c(2*sd(merged$diff), -2*sd(merged$diff)), colour="green", linetype = "longdash")+
-  theme_classic()+
-  labs(title = paste("2 Standard Deviations = ", round(2*sd(merged$diff), 3)))
-```
-
-```{r}
-
-t <- rbinom(ncell(r), 1,.25)
-t[which(t >0 )] <- rnorm(length(t[which(t >0 )]), 0,sd(vals))
-
-rt3 <- r + t
-
-t <- rbinom(ncell(r), 1,.25)
-t[which(t >0 )] <- rnorm(length(t[which(t >0 )]), 0,sd(vals))
-
-rt4 <- r + t
-t <- rbinom(ncell(r), 1,.25)
-t[which(t >0 )] <- rnorm(length(t[which(t >0 )]), 0,sd(vals))
-
-rt5 <- r + t
-t <- rbinom(ncell(r), 1,.25)
-t[which(t >0 )] <- rnorm(length(t[which(t >0 )]), 0,sd(vals))
-
-rt6 <- r + t
-s <- stack(rt1, rt3,rt4,rt5,rt6)
-
-s[[1,]]
-```
-
-```{r}
-test_grid <- agg_poly
-for (i in 1:5) {
-  # r.vals <- raster::extract(paste0("r",i), test_grid)
-    r.vals <- raster::extract(s[[i,]], test_grid)
-
-    # Use list apply to calculate mean for each polygon
-    r.mean <- lapply(r.vals, FUN=mean, na.rm = T)
-    # Join mean values to polygon data
-    test_grid@data <- data.frame(test_grid@data, test=unlist(r.mean))
-    colnames(test_grid@data)[length(colnames(test_grid@data))] <- paste0("test.rand", i)
-    
-}
-  test_grid = st_as_sf(test_grid)  
-  
-  test_grid <- cbind(test_grid, merged$base)
-
-```
-
-```{r}
-test_grid <- test_grid |> 
-  group_by(layer) |> 
-  mutate(mean_test = mean(c(test.rand1,test.rand2,test.rand3,test.rand4,test.rand5))) |> 
-  mutate(stack_diff = (mean_test - merged.base))
-
-ggplot(data = test_grid)+
-  geom_density(mapping =  aes(x = stack_diff, y = ..density..)) +
-  geom_vline(xintercept = mean(test_grid$stack_diff), colour="red")+
-  geom_vline(xintercept = c(sd(test_grid$stack_diff), -1*sd(test_grid$stack_diff)), colour="red", linetype = "longdash")+
-    geom_vline(xintercept = c(2*sd(test_grid$stack_diff), -2*sd(test_grid$stack_diff)), colour="green", linetype = "longdash")+
-  theme_classic()+
-  labs(title = paste("2 Standard Deviations = ", round(2*sd(test_grid$stack_diff), 3)))
 ```
 
